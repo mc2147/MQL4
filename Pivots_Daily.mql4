@@ -1,0 +1,851 @@
+//+------------------------------------------------------------------+
+//|   Original Indicator Auto-Pivot Plotter Labels.mq4 Elton Treloar |
+//|               I called this one Pivot Point S&R + GMT correction |
+//|                                         and was made by Linuxser |
+//|  Thanks to Rosh form metaquotes forum for fix the redraw problem |
+//+------------------------------------------------------------------+
+#property copyright ""
+#property link      ""
+#define IND_NAME "Pivot Point S&R"
+#property indicator_chart_window
+#property indicator_buffers 8
+#property indicator_color1 clrYellow
+#property indicator_color2 Blue
+#property indicator_color3 Red
+#property indicator_color4 Blue
+#property indicator_color5 Red
+#property indicator_color6 Blue
+#property indicator_color7 Red
+#property indicator_color8 Yellow
+#property indicator_color9 Orange
+
+#property indicator_color10 Blue //PTest
+
+#property indicator_color11 Lime //PAbove
+#property indicator_color12 Red //PBelow
+
+#property indicator_color13 clrDarkViolet //Cross
+
+#property indicator_color14 clrAqua //Cross2
+
+#property indicator_color15 clrLime //+ Avg Max
+#property indicator_color16 clrRed //- Avg Max
+
+#property indicator_color17 clrOrange
+
+#property indicator_color18 clrRed //+ Red Line
+#property indicator_color19 clrLime //- Green Line
+
+
+//---- input parameters
+extern int       StartHour=0;
+extern int       StartMinute=0;
+extern int       DaysToPlot=30;
+extern color     SupportLabelColor=DodgerBlue;
+extern color     ResistanceLabelColor=OrangeRed;
+extern color     PivotLabelColor=Green;
+extern int       fontsize=8;
+extern int       LabelShift = 0;
+extern int       AveragingPeriod = 3;
+extern bool ShowVisuals = false;
+
+//---- buffers
+double R3Buffer[];
+double R2Buffer[];
+double R1Buffer[];
+double PBuffer[];
+double S1Buffer[];
+double S2Buffer[];
+double S3Buffer[];
+
+double MaxDistance[];
+double DistanceTest[];
+double PTest[];
+
+double AboveP[];
+double BelowP[];
+
+double PivotCross[];
+
+double Cross2[];
+
+double PlusAvgMax[];
+double MinusAvgMax[];
+
+double OrangeArrows[];
+
+string Pivot="Pivot",Sup1="S 1", Res1="R 1";
+string Sup2="S 2", Res2="R 2", Sup3="S 3", Res3="R 3";
+
+datetime LabelShiftTime;
+
+datetime DayStartTimes[];
+
+double P,S1,R1,S2,R2,S3,R3;
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+
+double GreenLine[];
+double RedLine[];
+
+int init()
+  {
+//---- indicators
+   SetIndexStyle(0,DRAW_LINE,EMPTY, 3);
+   SetIndexBuffer(0,PBuffer);
+   
+   SetIndexStyle(1,DRAW_LINE,EMPTY);
+   SetIndexStyle(2,DRAW_LINE,EMPTY);
+   SetIndexStyle(3,DRAW_LINE,EMPTY);
+   SetIndexStyle(4,DRAW_LINE,EMPTY);
+   SetIndexStyle(5,DRAW_LINE,EMPTY);
+   SetIndexStyle(6,DRAW_LINE,EMPTY);
+   
+   SetIndexStyle(7,DRAW_ARROW,EMPTY, 3);
+   SetIndexArrow(7,174);      
+   SetIndexBuffer(7,MaxDistance);
+
+   SetIndexStyle(8,DRAW_LINE,EMPTY);
+   SetIndexBuffer(8,DistanceTest);
+   
+   SetIndexStyle(9,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(9,232);      
+   SetIndexBuffer(9,PTest);   
+   
+   SetIndexStyle(10,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(10,233);      
+   SetIndexStyle(11,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(11,234);      
+   //Pivot Cross
+   SetIndexStyle(12,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(12,251);         
+   //Cross 2
+   SetIndexStyle(13,DRAW_ARROW,EMPTY, 10);
+   SetIndexArrow(13,251);         
+   //+ - AvgMax
+   SetIndexStyle(14,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(14,232);         
+   SetIndexStyle(15,DRAW_ARROW,EMPTY, 5);
+   SetIndexArrow(15,232);         
+   
+   
+   SetIndexBuffer(1,S1Buffer);
+   SetIndexBuffer(2,R1Buffer);
+   SetIndexBuffer(3,S2Buffer);
+   SetIndexBuffer(4,R2Buffer);
+   SetIndexBuffer(5,S3Buffer);
+   SetIndexBuffer(6,R3Buffer);
+   SetIndexBuffer(10,AboveP);   
+   SetIndexBuffer(11,BelowP);   
+   SetIndexBuffer(12,PivotCross);   
+   SetIndexBuffer(13,Cross2); 
+     
+   SetIndexBuffer(14,PlusAvgMax);   
+   SetIndexBuffer(15,MinusAvgMax);   
+   
+   SetIndexStyle(16,DRAW_ARROW,EMPTY,5);
+   SetIndexArrow(16,232);
+   SetIndexBuffer(16,OrangeArrows);
+
+   SetIndexStyle(17,DRAW_LINE,EMPTY, 6);
+   SetIndexBuffer(17,RedLine);   
+
+   SetIndexStyle(18,DRAW_LINE,EMPTY, 5);
+   SetIndexBuffer(18, GreenLine); 
+
+   
+   IndicatorShortName(IND_NAME);
+//----
+  
+   CreateLabel("Consecutive Title", "Consecutive Days Without Touch:", CORNER_RIGHT_UPPER, 10, 10, clrYellow, 11);
+
+   CreateLabel("0-Label", "0 Days:", CORNER_RIGHT_UPPER, 70, 50, Aqua, 11);
+   CreateLabel("0-Value", "--", CORNER_RIGHT_UPPER, 0, 50, clrOrange, 11);
+
+   CreateLabel("1-Label", "1 Day:", CORNER_RIGHT_UPPER, 70, 90, Aqua, 11);
+   CreateLabel("1-Value", "--", CORNER_RIGHT_UPPER, 0, 90, clrOrange, 11);
+
+   CreateLabel("2-Label", "2 Days:", CORNER_RIGHT_UPPER, 70, 130, Aqua, 11);
+   CreateLabel("2-Value", "--", CORNER_RIGHT_UPPER, 0, 130, clrOrange, 11);
+
+   CreateLabel("3-Label", "3 Days:", CORNER_RIGHT_UPPER, 70, 170, Aqua, 11);
+   CreateLabel("3-Value", "--", CORNER_RIGHT_UPPER, 0, 170, clrOrange, 11);
+
+   CreateLabel("4-Label", "4 Days:", CORNER_RIGHT_UPPER, 70, 210, Aqua, 11);
+   CreateLabel("4-Value", "--", CORNER_RIGHT_UPPER, 0, 210, clrOrange, 11);
+
+
+   return(0);
+  }
+//+------------------------------------------------------------------+
+//| Custom indicator deinitialization function                       |
+//+------------------------------------------------------------------+
+int deinit()
+  {
+   ObjectDelete("Res3");
+   ObjectDelete("Res2");
+   ObjectDelete("Res1");
+   ObjectDelete("Pivot");
+   ObjectDelete("Sup1");
+   ObjectDelete("Sup2");
+   ObjectDelete("Sup3");   
+   return(0);
+  }
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+
+bool newPivot = true;
+bool G_Pivot_Crossed = false;
+double G_LastPivot = 0;
+enum Position {Above, Below, None};
+Position G_LastPosition = None;
+double G_LastMax;
+int G_LastDay = 0;
+int VLineCount = 0;
+
+void CreateVLine(string _name, datetime X, int clr, int width) {
+   VLineCount ++;
+   string name = _name + VLineCount;
+   ObjectCreate(0,name,OBJ_VLINE,0,X,0);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
+} 
+
+int Font_Size = 12;
+string Font_Type = "Arial";
+
+void CreateLabel(string labelName, string text, int corner, datetime XDistance, double YDistance, color Clr, int fontSize) {
+    ObjectCreate(labelName, OBJ_LABEL, 0, 0, 0);
+    ObjectSet(labelName, OBJPROP_CORNER, corner);
+    ObjectSet(labelName, OBJPROP_XDISTANCE, XDistance);
+    ObjectSet(labelName, OBJPROP_YDISTANCE, YDistance );
+    ObjectSetText(labelName, text, fontSize, Font_Type, Clr );      
+}
+
+double Highest;
+double Lowest;
+
+double G_LastMaxPoint;
+
+double G_AverageMax;
+
+struct DailyPivot {
+   double P;
+   bool Crossed;
+   datetime Start;
+   datetime End;
+   Position Pos;
+   double MaxDistance;
+   double MaxAvg;
+   double MaxAboveAvg;
+   double MaxBelowAvg;   
+   double MaxPoint;   
+   int StartIndex;
+   bool Created;
+};
+
+DailyPivot PivotList [];
+DailyPivot ShiftedPivot;
+DailyPivot LastPivot;
+LastPivot.Created = false;
+
+double MaxList [];
+double G_Last_AvgMax;
+int TLineCount = 0;
+
+bool G_Touched = false;
+
+double Last_P = 0;
+
+int G_IndexShift = 0;
+
+int Counter [5];
+Counter[0] = 0;
+Counter[1] = 0;
+Counter[2] = 0;
+Counter[3] = 0;
+Counter[4] = 0;
+Counter[5] = 0;
+Counter[6] = 0;
+
+string valObjectNames [5];  
+valObjectNames[0] = "0-Value";
+valObjectNames[1] = "1-Value";
+valObjectNames[2] = "2-Value";
+valObjectNames[3] = "3-Value";
+valObjectNames[4] = "4-Value";
+
+int ConsecDays = 0;
+
+int start()
+  {
+   int    counted_bars=IndicatorCounted(); 
+  
+//---- exit if period is greater than daily charts
+    if(Period() > 240)
+   {
+   Print("Error - Chart period is greater than 1 day.");
+   return(-1); // then exit
+   }
+  
+//---- indicator calculation
+
+{
+   if (counted_bars==0)
+   if(counted_bars<0) return(-1);
+   //---- last counted bar will be recounted
+   if(counted_bars>0) counted_bars--;
+   
+   
+}
+
+   int limit=Bars-counted_bars;
+   int StartMinutesIntoDay=(StartHour*60)+StartMinute; // 8' o'clock x 60 = 480
+   int CloseMinutesIntoDay=StartMinutesIntoDay-Period(); //
+   
+   
+   // ****************************************************
+   //    Check That cloes time isn't now a negative number.
+   //    Correct if it is by adding a full day's worth 
+   //    of minutes.
+   // ****************************************************
+   
+   if (CloseMinutesIntoDay<0)
+      {
+         CloseMinutesIntoDay=CloseMinutesIntoDay+1440;
+      }
+      
+   // ****************************************************
+   //    Establish the nuber of bars in a day.
+   // ****************************************************
+   int BarsInDay=1440/Period();
+    
+   // ******************************************************************************************
+   // ******************************************************************************************
+   //                                        Main Loop                                      
+   // ******************************************************************************************
+   // ******************************************************************************************
+   
+   for(int i=0; i<limit; i++)
+   { 
+      // ***************************************************************************
+      //       Only do all this if we are within the plotting range we want.
+      //       i.e. DaysToPlot 
+      //       If DaysToPlot is "0" (zero) we plot ALL available data. This can be 
+      //    VERY slow with a large history and at small time frames. Expect to
+      //    wait if plotting a year or more on a say a five minute chart. On my PC 
+      //    two years of data at Five Minutes takes around 30 seconds per indicator. 
+      //    i.e. 30 seconds for main pivot levels indicator then another 30 seconds 
+      //    to plot the seperate mid-levels indicator. 
+      // ***************************************************************************
+      if ( (i<((DaysToPlot+1)*BarsInDay))||DaysToPlot==0)   // Used to limit the number of days
+      {                                                     // that are mapped out. Less waiting ;)
+      
+      // *****************************************************
+      //    Find previous day's opening and closing bars.
+      // *****************************************************
+      int PreviousClosingBar = FindLastTimeMatchFast(CloseMinutesIntoDay,i+1); //Last Day OHLCx
+      int PreviousOpeningBar = FindLastTimeMatchFast(StartMinutesIntoDay,PreviousClosingBar+1);
+      
+      double PreviousHigh= High[PreviousClosingBar];
+      double PreviousLow = Low [PreviousClosingBar];
+      double PreviousClose = Close[PreviousClosingBar];
+      
+      // *****************************************************
+      //    Find previous day's high and low.
+      // *****************************************************
+      
+      for (int SearchHighLow=PreviousClosingBar;SearchHighLow<(PreviousOpeningBar+1);SearchHighLow++)
+      {
+         if (High[SearchHighLow]>PreviousHigh) PreviousHigh=High[SearchHighLow];
+         if (Low[SearchHighLow]<PreviousLow) PreviousLow=Low[SearchHighLow];
+      }
+      double Shift = MathFloor(i/BarsInDay) - 1;
+//      PreviousHigh= iHigh(Symbol(), PERIOD_D1, Shift);
+//      PreviousLow = iLow(Symbol(), PERIOD_D1, Shift);
+//      PreviousClose = iClose(Symbol(), PERIOD_D1, Shift);
+      
+      // ************************************************************************
+      //    Calculate Pivot lines and map into indicator buffers.
+      // ************************************************************************
+      {
+      double P =  (PreviousHigh+PreviousLow+PreviousClose)/3;
+      
+      double R1 = (2*P)-PreviousLow;
+      double S1 = (2*P)-PreviousHigh;
+      double R2 =  P+(PreviousHigh - PreviousLow);
+      double S2 =  P-(PreviousHigh - PreviousLow);
+      double R3 = (2*P)+(PreviousHigh-(2*PreviousLow));
+      double S3 = (2*P)-((2* PreviousHigh)-PreviousLow); 
+      R1 = 0;
+      R2 = 0;
+      R3 = 0;
+      S1 = 0;
+      S2 = 0;
+      S3 = 0;
+      
+      double thisClose = Close[i];
+      double thisHigh = High[i];
+      double thisLow = Low[i]; 
+      datetime LastBarTime = Time[i + 1];
+      datetime thisTime = Time[i];
+
+      int thisDay = TimeDay(LastBarTime);
+      
+      if (Last_P != P) {
+         OrangeArrows[i] = P;
+         G_Touched = false;
+         if (thisLow > P) {
+            LastPivot.Pos = Above;
+         }
+         else if (thisHigh < P) {
+            LastPivot.Pos = Below;
+         }
+         Last_P = P;         
+      }
+      
+      bool nextDay = false;
+      if (i <= 1) {
+         G_LastDay = thisDay;   
+      }
+      
+      if (thisDay != G_LastDay && i > 1) {
+         LastPivot.Created = true;
+         nextDay  = true;
+         G_LastDay = thisDay;
+         //Add last pivot to list
+         int AvgPeriod = AveragingPeriod;
+         int PivotCount = ArraySize(PivotList);
+         DailyPivot PlaceholderPivots[3];
+         //Adding Last Pivot To List
+         if (PivotCount < AvgPeriod) {
+            ArrayResize(PivotList, PivotCount + 1, AvgPeriod);
+            PivotList[PivotCount] = LastPivot;
+         }
+         else if (PivotCount >= AvgPeriod) {
+            ArrayResize(PlaceholderPivots, AvgPeriod, AvgPeriod);
+            int CopyOver = ArrayCopy(PlaceholderPivots, PivotList, 0, 1, AvgPeriod);
+            PlaceholderPivots[AvgPeriod - 1] = LastPivot;
+            Print("CopyOver: " + CopyOver);     
+            for (int z = 0; z < AvgPeriod; z ++) {
+               PivotList[z] = PlaceholderPivots[z];
+            }     
+         }
+         string MaxListString = "";
+         double MaxSum = 0;
+         int MaxN = ArraySize(PivotList);
+         for (int y = 0; y < MaxN; y++) {
+            DailyPivot thisPivot = PivotList[y];
+            MaxListString += thisPivot.MaxDistance + ", ";
+            MaxSum += thisPivot.MaxDistance;
+         }
+         string TimeString = TimeToStr(thisTime, TIME_DATE);
+         Print("Max List: " + MaxListString + " " + TimeString);
+         G_Last_AvgMax = MaxSum/MaxN;
+         Print("AvgMax: " + G_Last_AvgMax);
+         if (MaxN >= AvgPeriod) {
+            DailyPivot currentPivot = PivotList[0];
+            int AvgMarkerindex = currentPivot.StartIndex;
+            G_IndexShift = i - currentPivot.StartIndex;
+            double _P = currentPivot.P;
+            
+            //#+- stuff
+            TLineCount ++;
+            string PlusMaxLine = "+ Max " + TLineCount;            
+            string SubMaxLine = "- Max " + TLineCount;
+            datetime T1 = Time[AvgMarkerindex];
+            datetime T2 = Time[AvgMarkerindex] + 500;
+            //Green + Line
+               //ObjectCreate(0,PlusMaxLine,OBJ_TREND, 0, T1, _P + G_Last_AvgMax, T2, _P + G_Last_AvgMax);
+               //ObjectSetInteger(0,PlusMaxLine,OBJPROP_COLOR,clrLime);
+               //ObjectSetInteger(0,PlusMaxLine,OBJPROP_WIDTH,2);        
+            //Red - Line
+               //ObjectCreate(0,SubMaxLine,OBJ_TREND, 0, T1, _P - G_Last_AvgMax, T2, _P - G_Last_AvgMax);
+               //ObjectSetInteger(0,SubMaxLine,OBJPROP_COLOR,clrRed);
+               //ObjectSetInteger(0,SubMaxLine,OBJPROP_WIDTH,2);                                                            
+            PlusAvgMax[AvgMarkerindex] = _P + G_Last_AvgMax;
+            MinusAvgMax[AvgMarkerindex] = _P - G_Last_AvgMax;            
+//            GreenLine[AvgMarkerindex] = _P + G_Last_AvgMax;
+//            RedLine[AvgMarkerindex] = _P - G_Last_AvgMax;
+
+         }
+//         OrangeArrows[i] = P;
+//         G_Touched = false;
+         
+         LastPivot.End = Time[i];         
+         LastPivot.P = P;
+      }
+      datetime ShiftedTime = Time[i - G_IndexShift];
+      datetime DayTime = 86400;
+//      int numBarsDay = iBarShift(Symbol(), 0, ShiftedTime + DayTime);      
+//      GreenLine[numBarsDay] = PBuffer[numBarsDay] + G_Last_AvgMax;
+//      RedLine[numBarsDay] = PBuffer[numBarsDay] - G_Last_AvgMax;
+
+      int numBarsDay = DayTime/(Period()*60);      
+      if (i - G_IndexShift > numBarsDay) {
+         GreenLine[i - G_IndexShift - numBarsDay] = PBuffer[i - G_IndexShift - numBarsDay] + G_Last_AvgMax;
+         RedLine[i - G_IndexShift - numBarsDay] = PBuffer[i - G_IndexShift - numBarsDay] - G_Last_AvgMax;      
+      }
+
+//      GreenLine[i] = P + G_Last_AvgMax;
+//      RedLine[i] = P - G_Last_AvgMax;
+      
+//      Print("G_IndexShift: " + G_IndexShift);
+      //OnBar Stuff
+      if (thisLow > P) {
+         //Useful
+         if (ShowVisuals) {
+            AboveP[i] = P;
+            PivotCross[i] = thisHigh;
+         }
+         if (nextDay) {
+//            PTest[i] = P;
+            //Using Pivot Struct
+            LastPivot.MaxPoint = P + LastPivot.MaxDistance;
+
+            LastPivot.Crossed = false;
+            LastPivot.Pos = Above;
+            LastPivot.MaxDistance = thisHigh - P;
+            LastPivot.End = Time[i];
+            //Using Pivot Struct End            
+//            G_LastMaxPoint = P + G_LastMax;
+            
+            if (G_Touched) {
+               PTest[i] = LastPivot.MaxPoint;            
+               ConsecDays = 0;
+            }
+            else {
+               ConsecDays++;
+            }            
+            Counter[ConsecDays]++;
+            ObjectSetText(ConsecDays + "-Value", Counter[ConsecDays],11,"Arial", clrOrange);                        
+            WindowRedraw();
+            
+//    ObjectSetText(labelName, text, fontSize, Font_Type, Clr );      
+            
+            LastPivot.Start = thisTime;
+            LastPivot.StartIndex = i;
+            
+            CreateVLine("Day Start", Time[i], clrLime, 2);    
+//            G_Touched = false; 4-1 change
+         }
+         else if (
+         LastPivot.MaxDistance
+         && LastPivot.Pos == Above
+         && (thisHigh - P) > LastPivot.MaxDistance         
+         ) {
+              LastPivot.MaxDistance = thisHigh - P;                      
+               if (ShowVisuals) {
+                  MaxDistance[i] = thisHigh;
+               }
+         }
+         if (LastPivot.Pos == Below || LastPivot.Pos == None) {
+            G_Touched = true;
+            LastPivot.MaxDistance = thisHigh - P;
+         }
+         LastPivot.Pos = Above;
+      }
+      else if (thisHigh < P) {
+         //Useful
+         if (ShowVisuals) {
+            BelowP[i] = P;
+            PivotCross[i] = thisLow;         
+         }
+         if (nextDay) {
+            //Using Pivot Struct
+            LastPivot.MaxPoint = P - LastPivot.MaxDistance;
+
+            LastPivot.Crossed = false;
+            LastPivot.Pos = Below;
+            LastPivot.MaxDistance = P - thisLow;
+
+            LastPivot.End = Time[i];
+            //Using Pivot Struct End                                 
+            if (G_Touched) {
+               PTest[i] = LastPivot.MaxPoint;            
+               ConsecDays = 0;
+            }
+            else {
+               ConsecDays++;
+            }            
+            Counter[ConsecDays]++;
+            ObjectSetText(ConsecDays + "-Value", Counter[ConsecDays],11,"Arial", clrOrange);                        
+            WindowRedraw();
+            
+            LastPivot.Start = thisTime;
+            LastPivot.StartIndex = i;
+         
+            Lowest = thisLow;
+            CreateVLine("Day Start", Time[i], clrRed, 2);
+//            G_Touched = false; 4-1 change
+         }
+         else if (
+         LastPivot.MaxDistance
+         && LastPivot.Pos == Below
+         && (P - thisLow) > LastPivot.MaxDistance          
+         ) {
+            LastPivot.MaxDistance = P - thisLow;
+            Lowest = thisLow;
+            if (ShowVisuals) {
+               MaxDistance[i] = thisLow;         
+            }
+         }
+         if (LastPivot.Pos == Above || LastPivot.Pos == None) {
+            LastPivot.MaxDistance = P - thisLow;
+            G_Touched = true;
+         }
+         LastPivot.Pos = Below;
+      }
+      else {
+         if (ShowVisuals) {
+            Cross2[i] = P;      
+         }
+         if (LastPivot.Pos == Above) {
+            LastPivot.MaxPoint = P + LastPivot.MaxDistance;
+         }
+         else if (LastPivot.Pos == Below) {
+            LastPivot.MaxPoint = P - LastPivot.MaxDistance;         
+         }
+         if (nextDay) {
+            if (G_Touched) {
+               PTest[i] = LastPivot.MaxPoint;            
+               ConsecDays = 0;
+            }
+            else {
+               ConsecDays++;
+            }            
+            Counter[ConsecDays]++;
+            ObjectSetText(ConsecDays + "-Value", Counter[ConsecDays],11,"Arial", clrOrange);                        
+            WindowRedraw();
+            
+            LastPivot.Start = thisTime;
+            LastPivot.StartIndex = i;
+            LastPivot.Pos = None;
+            CreateVLine("Day Start", Time[i], clrAqua, 2);
+//            G_Touched = false; 4-1 change
+         }
+         LastPivot.Pos = None;
+      }
+      
+      int TotalN = 0;
+      int CounterLength = ArraySize(Counter);
+      for (int k = 0; k < CounterLength; k ++) {
+         TotalN += Counter[k];
+      }
+      for (int x = 0; x < CounterLength; x ++) {
+            if (TotalN != 0) {
+                ObjectSetText(x + "-Value", (100*Counter[x]/TotalN) + "%",11,"Arial", clrOrange);                                    
+            }
+      }
+      WindowRedraw();      
+      
+      
+      
+      //Matt's code ends here
+
+      LabelShiftTime = Time[LabelShift];
+      
+      if(ObjectFind("Pivot") == -1)
+         {
+         Print(i);
+   
+         ObjectCreate("Pivot", OBJ_TEXT, 0, LabelShiftTime, 0);   
+         ObjectSetText("Pivot", "                           Pivot " +DoubleToStr(P,4),fontsize,"tahoma ",PivotLabelColor);
+         SetIndexLabel(0, "Pivot Point");
+         ObjectCreate("Sup1", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Sup1", "                    S1 " +DoubleToStr(S1,4),fontsize,"tahoma ",SupportLabelColor);
+         SetIndexLabel(1, "S1");
+         ObjectCreate("Res1", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Res1", "                    R1 " +DoubleToStr(R1,4),fontsize,"tahoma ",ResistanceLabelColor);
+         SetIndexLabel(2, "R1");
+         ObjectCreate("Sup2", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Sup2", "                    S2 " +DoubleToStr(S2,4),fontsize,"tahoma ",SupportLabelColor);
+         SetIndexLabel(3, "S2");
+         ObjectCreate("Res2", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Res2", "                    R2 " +DoubleToStr(R2,4),fontsize,"tahoma ",ResistanceLabelColor);
+         SetIndexLabel(4, "R2");
+         ObjectCreate("Sup3", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Sup3", "                    S3 " +DoubleToStr(S3,4),fontsize,"tahoma ",SupportLabelColor);
+         SetIndexLabel(5, "S3");
+         ObjectCreate("Res3", OBJ_TEXT, 0, LabelShiftTime, 0);
+         ObjectSetText("Res3", "                    R3 " +DoubleToStr(R3,4),fontsize,"tahoma ",ResistanceLabelColor);
+         SetIndexLabel(6, "R3");
+         Print("ObjectSet Done");
+         ObjectMove("Res3", 0, LabelShiftTime,R3);
+         ObjectMove("Res2", 0, LabelShiftTime,R2);
+         ObjectMove("Res1", 0, LabelShiftTime,R1);
+         ObjectMove("Pivot", 0, LabelShiftTime,P);
+         ObjectMove("Sup1", 0, LabelShiftTime,S1);
+         ObjectMove("Sup2", 0, LabelShiftTime,S2);
+         ObjectMove("Sup3", 0, LabelShiftTime,S3);
+         Print("ObjectMove Done");
+      
+         ObjectsRedraw(); 
+         Print("ObjectsRedraw Done");
+         }
+   }
+      
+}  
+    R3Buffer[i]=R3;
+    R2Buffer[i]=R2;
+    R1Buffer[i]=R1;
+    PBuffer[i]=P;
+    S1Buffer[i]=S1;
+    S2Buffer[i]=S2;
+    S3Buffer[i]=S3;
+    
+   }
+      // Extra1[i]=OpenPriceAt+i;
+
+      //   **********************************************
+      //      Calculate the mid-levels in to the buffers. 
+      //      (for mid-levels version)
+      //   **********************************************(Twe)
+      // Res1[i] =((R1-P)/2)+P;    //M3
+      // Res2[i] =((R2-R1)/2)+R1;  //M4
+      // Res3[i] =((R3-R2)/2)+R2;  
+      // Supp1[i]=((P-S1)/2)+S1;   //M2
+      // Supp2[i]=((S1-S2)/2)+S2;  //M1
+      // Supp3[i]=((S2-S3)/2)+S3;
+       //End of 'DaysToPlot 'if' statement.
+     
+      // ***************************************************************************************
+      //                            End of Main Loop
+      // ***************************************************************************************
+  
+
+   // *****************************************
+   //    Return from Start() (Main Routine)
+   return(0);
+  
+  }
+//+-------------------------------------------------------------------------------------------------------+
+//  END Custom indicator iteration function
+//+-------------------------------------------------------------------------------------------------------+
+
+
+// *****************************************************************************************
+// *****************************************************************************************
+// -----------------------------------------------------------------------------------------
+//    The following routine will use "StartingBar"'s time and use it to find the 
+//    general area that SHOULD contain the bar that matches "TimeToLookFor"
+// -----------------------------------------------------------------------------------------
+int FindLastTimeMatchFast(int TimeToLookFor,int StartingBar)
+   {
+   int StartingBarsTime=(TimeHour(Time[StartingBar])*60)+TimeMinute(Time[StartingBar]);
+   
+   // ***************************************************
+   //    Check that our search isn't on the otherside of 
+   //    the midnight boundary and correct for calculations
+   // ***************************************************
+   if (StartingBarsTime<TimeToLookFor)
+      {
+      StartingBarsTime=StartingBarsTime+1440;
+      }
+      
+   // ***************************************************
+   //    Find out where the bar SHOULD be in time.
+   // ***************************************************
+   int HowFarBack=StartingBarsTime-TimeToLookFor;
+   
+   // ***************************************************
+   //    Translate that into Bars
+   // ***************************************************
+   int HowManyBarsBack=HowFarBack/Period();
+   
+   // ***************************************************
+   //    We've found our starting point
+   //    Calculate it's relative time in minutes.
+   // ***************************************************
+   int SuggestedBar=StartingBar+HowManyBarsBack;
+   
+   int SuggestedBarsTime=(TimeHour(Time[SuggestedBar])*60)+TimeMinute(Time[SuggestedBar]);
+   
+   // ***************************************************
+   //    If we have what we're after let's just skip the 
+   //    crap and return the position of the bar in the 
+   //    chart to our main routine
+   // ***************************************************
+   if (SuggestedBarsTime==TimeToLookFor)
+      {
+      return(SuggestedBar);
+      }   
+      
+   // ***************************************************
+   // Else find the difference in time from where we
+   // were supposed to find the bar.
+   // ***************************************************
+   int DeltaTimeFound=TimeToLookFor-SuggestedBarsTime;
+   int DeltaBarFound=DeltaTimeFound/Period();
+   
+   // ***************************************************
+   // I'd be worried if Delta was below zero. Would mean
+   // that we have EXTRA bars in that day.  Unlikely in 
+   // the extreme.
+   // So I'm only checking for the other case.
+   // ...now let's search in a narrow range to find that 
+   // bar we are after...
+   // ***************************************************
+   if (DeltaTimeFound>0)
+      {
+        for (int SearchCount=SuggestedBar ;SearchCount>(SuggestedBar-DeltaBarFound-2) ;SearchCount--)
+            {
+            // ******************************************************************************
+            //    Find time (in minutes) of the current bar AND the two bars either side of it.
+            // This is done to allow for any missing bars in the data.   i.e. If THE bar you 
+            // were after were to be missing you'd never get a valid close/open time.  
+            //    This is the same reason for searching rather than just looking back a certain
+            // number of bars from the close time. Missing bars upset the count back and 
+            // screw up all pivot calculations. There is still room for error but it's improved.
+            // The best calculations will come from having the best data. ...of course. :)
+            // ******************************************************************************
+            //
+            int PreviousBarsTime=(TimeHour(Time[SearchCount+1])*60)+TimeMinute(Time[SearchCount+1]);
+            int CurrentBarsTime=(TimeHour(Time[SearchCount])*60)+TimeMinute(Time[SearchCount]);
+            int NextBarsTime=(TimeHour(Time[SearchCount-1])*60)+TimeMinute(Time[SearchCount-1]);
+      
+            if (CurrentBarsTime==TimeToLookFor)
+               {
+               return(SearchCount);    // *** If current bar is what we are after than lets get out.
+                                 // *** without mucking about with the rest of the checks.
+               }
+      
+            // **********************************
+            //    Check that previous bar doesn't
+            // lay on a different day.
+            //    Adjust if it is
+            // **********************************
+            if(PreviousBarsTime>CurrentBarsTime)  
+               {                                       
+               PreviousBarsTime=PreviousBarsTime-1440;
+               }
+            // **********************************
+            //    Check that following bar doesn't
+            // lay on a different day. 
+            //    Adjust if it is.
+            // **********************************
+            if(NextBarsTime<CurrentBarsTime)         
+               {
+               NextBarsTime=NextBarsTime+1440;
+               }
+            // ******************************************
+            //    If this is the best we can get
+            // to the actual bar we are after, then 
+            // exit, returning current bar number.
+            // *******************************************    
+            if(PreviousBarsTime<TimeToLookFor)
+               {
+                  if( TimeToLookFor<NextBarsTime)
+                  {
+                  return(SearchCount);
+                  }
+               }
+            }
+      }
+   
+   return (SuggestedBar);
+   }
+
